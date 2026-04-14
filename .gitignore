@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform variables / secrets
+*.tfvars
+*.tfvars.json
+
+# Ansible generated runtime files
+ansible/inventory.ini
+ansible/group_vars/all.yml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
