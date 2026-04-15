@@ -1,6 +1,6 @@
-# WordPress Multi-Region AWS Deployment
+# WordPress AWS Deployment
 
-Global WordPress deployment on AWS using Terraform for infrastructure provisioning, Ansible for server configuration, Python for dynamic inventory generation, and Jenkins for CI/CD orchestration.
+WordPress deployment on AWS using Terraform for infrastructure provisioning, Ansible for server configuration, Python for dynamic inventory generation, and Jenkins for CI/CD orchestration.
 
 ## Project Rationale
 
