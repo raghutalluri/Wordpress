@@ -35,11 +35,46 @@ The goal of this project is to deploy a scalable, highly available WordPress sta
 - Validation helper (`python/generate_ansible_config.py`)
    - Reads Terraform output and generates `ansible/inventory.ini` for optional Ansible checks
 
+## Architecture Diagram
+
+```mermaid
+flowchart TB
+   User[End Users] --> CF[CloudFront Distribution]
+   CF --> ALB[Application Load Balancer]
+   ALB --> ASG[Auto Scaling Group]
+   ASG --> EC2A[WordPress EC2 Instance A]
+   ASG --> EC2B[WordPress EC2 Instance B]
+
+   EC2A --> RDS[(RDS MySQL)]
+   EC2B --> RDS
+   EC2A --> S3[(S3 Uploads Bucket)]
+   EC2B --> S3
+   EC2A --> SM[AWS Secrets Manager]
+   EC2B --> SM
+
+   Jenkins[Jenkins Pipeline] --> TF[Terraform Init / Plan / Apply]
+   TF --> AWS[AWS Infrastructure]
+   AWS --> VPC[VPC + Public/Private Subnets + Routing]
+   VPC --> ALB
+   VPC --> ASG
+   VPC --> RDS
+   AWS --> IAM[IAM Role + Instance Profile]
+   IAM --> ASG
+
+   UserData[EC2 user_data Bootstrap] --> EC2A
+   UserData --> EC2B
+
+   PY[Python Inventory Generator] --> INV[ansible/inventory.ini]
+   INV --> ANS[Ansible Validation Playbook]
+   ANS --> EC2A
+   ANS --> EC2B
+```
+
 ## Repository Structure
 
 - `terraform/` Terraform root config and reusable modules
-- `ansible/` Optional validation playbook
-- `python/generate_ansible_config.py` Optional inventory generator for validation runs
+- `ansible/` validation playbook
+- `python/generate_ansible_config.py` inventory generator for validation runs
 - `terraform/modules/alb/userdata.sh` EC2 bootstrap script used by the launch template
 - `Jenkinsfile` CI/CD pipeline definition
 
