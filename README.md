@@ -38,39 +38,16 @@ The goal of this project is to deploy a scalable, highly available WordPress sta
 ## Architecture Diagram
 
 ```mermaid
-flowchart TB
-   User[End Users] --> CF[CloudFront Distribution]
-   CF --> ALB[Application Load Balancer]
-   ALB --> ASG[Auto Scaling Group]
-   ASG --> EC2A[WordPress EC2 Instance A]
-   ASG --> EC2B[WordPress EC2 Instance B]
-
-   EC2A --> RDS[(RDS MySQL)]
-   EC2B --> RDS
-   EC2A --> S3[(S3 Uploads Bucket)]
-   EC2B --> S3
-   EC2A --> SM[AWS Secrets Manager]
-   EC2B --> SM
-
-   Jenkins[Jenkins Pipeline] --> TF[Terraform Init / Plan / Apply]
-   TF --> AWS[AWS Infrastructure]
-   AWS --> VPC[VPC + Public/Private Subnets + Routing]
-   VPC --> ALB
-   VPC --> ASG
-   VPC --> RDS
-   AWS --> IAM[IAM Role + Instance Profile]
-   IAM --> ASG
-
-   UserData[EC2 user_data Bootstrap] --> EC2A
-   UserData --> EC2B
-
-   PY[Python Inventory Generator] --> INV[ansible/inventory.ini]
-   INV --> ANS[Ansible Validation Playbook]
-   ANS --> EC2A
-   ANS --> EC2B
-```
-
-## Repository Structure
+flowchart TD
+    Users["End Users<br/>(Global Distribution)"] --> CF["Amazon CloudFront<br/>Global CDN · Edge Caching"]
+    CF --> ALB["Application Load Balancer<br/>Health Checks"]
+    ALB --> ASG["Auto Scaling Group<br/>1-2 EC2 Instances"]
+    ASG --> EC2A["EC2 Instance 1<br/>WordPress + Apache"]
+    ASG --> EC2B["EC2 Instance 2<br/>WordPress + Apache"]
+    EC2A --> S3["Amazon S3<br/>Uploads Bucket"]
+    EC2B --> S3
+    EC2A --> RDS["RDS MySQL<br/>Database"]
+    EC2B --> RDS
 
 - `terraform/` Terraform root config and reusable modules
 - `ansible/` validation playbook
