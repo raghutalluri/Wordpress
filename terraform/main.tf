@@ -45,6 +45,8 @@ module "alb" {
 
   public_subnet_ids = module.vpc.public_subnet_ids
   rds_endpoint = module.rds.rds_endpoint
+  db_password_secret_name = module.rds.db_password_secret_name
+  region = var.region
   instance_profile_name = module.iam.instance_profile_name
   uploads_bucket_name = module.s3.bucket_name
 }

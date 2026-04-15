@@ -1,6 +1,6 @@
 # WordPress AWS Deployment
 
-WordPress deployment on AWS using Terraform for infrastructure provisioning, Ansible for server configuration, Python for dynamic inventory generation, and Jenkins for CI/CD orchestration.
+WordPress deployment on AWS using Terraform for infrastructure provisioning, EC2 user data for instance bootstrap, and Jenkins for CI/CD orchestration.
 
 ## Project Rationale
 
@@ -10,8 +10,8 @@ The goal of this project is to deploy a scalable, highly available WordPress sta
 - High Availability: WordPress instances run in an Auto Scaling Group behind an ALB.
 - Security: Database password is retrieved from AWS Secrets Manager at configuration time.
 - IaC-First: Infrastructure is managed with Terraform modules.
-- Configuration as Code: Ansible configures WordPress and Apache on EC2 instances.
-- Automation: Jenkins pipeline executes Terraform -> Python -> Ansible in order.
+- Self-Bootstrapping Compute: Every new EC2 instance installs and configures WordPress at launch through `user_data`.
+- Automation: Jenkins pipeline executes Terraform plan and apply for reproducible deployments.
 
 ## Core Components
 
@@ -23,57 +23,47 @@ The goal of this project is to deploy a scalable, highly available WordPress sta
   - S3 bucket and CloudFront
   - Outputs for ALB DNS, RDS endpoint, secret name, and web instance IPs
 
-- Ansible (`ansible/`)
-  - Installs Apache/PHP and required packages
-  - Downloads and configures WordPress
-  - Pulls DB secret from Secrets Manager
-  - Updates `wp-config.php` with runtime values
-
-- Python (`scripts/generate_ansible_config.py`)
-  - Reads `terraform output -json`
-  - Generates:
-    - `ansible/inventory.ini`
-    - `ansible/group_vars/all.yml`
+- EC2 bootstrap (`terraform/modules/alb/userdata.sh`)
+   - Installs Apache/PHP and required packages
+   - Downloads and configures WordPress
+   - Pulls DB secret from Secrets Manager
+   - Updates `wp-config.php` with runtime values on every new instance launch
 
 - Jenkins (`Jenkinsfile`)
-  - Runs Terraform init/apply
-  - Runs Python generator
-  - Runs Ansible playbook
+   - Runs Terraform init/plan/apply
+
+- Validation helper (`python/generate_ansible_config.py`)
+   - Reads Terraform output and generates `ansible/inventory.ini` for optional Ansible checks
 
 ## Repository Structure
 
 - `terraform/` Terraform root config and reusable modules
-- `ansible/` Ansible playbook, inventory, group variables
-- `scripts/generate_ansible_config.py` Terraform-to-Ansible bridge script
+- `ansible/` Optional validation playbook
+- `python/generate_ansible_config.py` Optional inventory generator for validation runs
+- `terraform/modules/alb/userdata.sh` EC2 bootstrap script used by the launch template
 - `Jenkinsfile` CI/CD pipeline definition
 
 ## Step-by-Step Deployment Workflow
 
 1. Pre-Deployment Validation
    - Ensure AWS credentials are available.
-   - Ensure Terraform and Python are installed.
-   - Ensure Ansible is installed (for local run path).
+   - Ensure Terraform is installed.
 
 2. Terraform Infrastructure Provisioning
    - Run Terraform init and apply.
    - Provision core resources (VPC, ALB/ASG, RDS, IAM, S3, CloudFront).
    - Export runtime outputs for downstream configuration.
 
-3. Generate Ansible Runtime Inputs
-   - Python script reads Terraform outputs.
-   - Writes current EC2 host IPs into `ansible/inventory.ini`.
-   - Writes runtime vars (RDS endpoint, ALB URL, secret name) into `ansible/group_vars/all.yml`.
+3. Instance Bootstrap via Launch Template User Data
+   - Each new EC2 instance installs the required packages at first boot.
+   - WordPress is downloaded and configured locally on the instance.
+   - The database password is pulled from Secrets Manager using the instance IAM role.
+   - Apache is started automatically so instances can join the target group without manual post-configuration.
 
-4. Configure WordPress with Ansible
-   - Connect to generated inventory hosts.
-   - Install software stack and deploy WordPress.
-   - Pull DB password from Secrets Manager.
-   - Configure `wp-config.php` and restart Apache.
-
-5. Post-Deployment Verification
+4. Post-Deployment Verification
    - Verify ALB URL responds.
    - Confirm WordPress installation page or configured site is reachable.
-   - Optionally run health checks and pipeline smoke tests.
+   - Optionally run Ansible health checks against current instances.
 
 ## Jenkins CI/CD Flow
 
@@ -81,14 +71,12 @@ The pipeline performs:
 
 1. Checkout
 2. Terraform Init
-3. Terraform Apply
-4. Generate Ansible Inventory
-5. Run Ansible
+3. Terraform Plan
+4. Terraform Apply
 
 Required Jenkins credentials:
 
 - `aws-creds` for AWS API access
-- `ec2-ssh-key` for Ansible SSH access
 
 ## Local Execution Commands
 
@@ -98,14 +86,11 @@ terraform init
 terraform apply -auto-approve
 
 cd ..
-python3 scripts/generate_ansible_config.py
-
-cd ansible
-ansible-playbook -i inventory.ini playbook.yaml --private-key /path/to/key.pem
+python3 python/generate_ansible_config.py
+ansible-playbook -i ansible/inventory.ini ansible/playbook.yaml --private-key /path/to/key.pem
 ```
 
 ## Design Notes
 
-- Launch template user data is intentionally minimal.
-- Ansible is the single source of truth for WordPress configuration.
-- Generated inventory and group vars should be regenerated after each Terraform apply.
+- Launch template user data is the source of truth for WordPress bootstrap.
+- This design allows replacement and autoscaled instances to self-configure on first boot.

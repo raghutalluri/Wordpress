@@ -26,11 +26,21 @@ pipeline {
       }
     }
 
+    stage('Terraform Plan') {
+      steps {
+        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
+          dir('terraform') {
+            sh 'terraform plan -input=false -out=tfplan'
+          }
+        }
+      }
+    }
+
     stage('Terraform Apply') {
       steps {
         withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
           dir('terraform') {
-            sh 'terraform apply -auto-approve -input=false'
+            sh 'terraform apply -auto-approve tfplan'
           }
         }
       }
@@ -38,27 +48,19 @@ pipeline {
 
     stage('Generate Ansible Inventory') {
       steps {
-        sh 'python3 scripts/generate_ansible_config.py'
+        sh 'python3 python/generate_ansible_config.py'
       }
     }
 
-    stage('Run Ansible') {
+    stage('Run Ansible Validation') {
       steps {
         withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY')]) {
-          dir('ansible') {
-            sh '''
-              export ANSIBLE_HOST_KEY_CHECKING=False
-              ansible-playbook -i inventory.ini playbook.yaml --private-key "$SSH_KEY"
-            '''
-          }
+          sh '''
+            export ANSIBLE_HOST_KEY_CHECKING=False
+            ansible-playbook -i ansible/inventory.ini ansible/playbook.yaml --private-key "$SSH_KEY"
+          '''
         }
       }
-    }
-  }
-
-  post {
-    always {
-      archiveArtifacts artifacts: 'ansible/inventory.ini, ansible/group_vars/all.yml', allowEmptyArchive: true
     }
   }
 }

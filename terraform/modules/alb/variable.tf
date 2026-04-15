@@ -18,6 +18,14 @@ variable "rds_endpoint" {
   type = string
 }
 
+variable "db_password_secret_name" {
+  type = string
+}
+
+variable "region" {
+  type = string
+}
+
 variable "instance_profile_name" {
   type = string
 }

@@ -61,7 +61,14 @@ resource "aws_launch_template" "wp_lt" {
 
   vpc_security_group_ids = [var.app_sg_id]
 
-  user_data = base64encode(templatefile("${path.module}/userdata.sh", {}))
+  user_data = base64encode(templatefile("${path.module}/userdata.sh", {
+    aws_region              = var.region
+    db_name                 = "wordpress"
+    db_user                 = "admin"
+    rds_endpoint            = var.rds_endpoint
+    secret_name             = var.db_password_secret_name
+    wordpress_site_url      = "http://${aws_lb.wp_alb.dns_name}"
+  }))
 
   tag_specifications {
     resource_type = "instance"

@@ -1,141 +1,53 @@
 - hosts: web
   become: yes
 
-  vars:
-    wordpress_dir: /var/www/html
-    db_name: "{{ wp_db_name | default('wordpress') }}"
-    db_user: "{{ wp_db_user | default('admin') }}"
-    rds_endpoint: "{{ wp_rds_endpoint }}"
-    alb_dns: "{{ wp_alb_url }}"
-    secret_name: "{{ wp_secret_name | default('wordpress-db-password') }}"
-
   tasks:
+    - name: Collect service facts
+      service_facts:
 
-    # -------------------------------
-    # Install packages
-    # -------------------------------
-    - name: Install required packages
-      yum:
-        name:
-          - httpd
-          - php
-          - php-mysqlnd
-          - wget
-          - awscli
-          - jq
-        state: present
+    - name: Verify Apache is running and enabled
+      assert:
+        that:
+          - "'httpd.service' in ansible_facts.services"
+          - "ansible_facts.services['httpd.service'].state == 'running'"
+          - "ansible_facts.services['httpd.service'].status == 'enabled'"
+        fail_msg: "Apache (httpd) is not running and enabled"
+        success_msg: "Apache is running and enabled"
 
-    # -------------------------------
-    # Start Apache
-    # -------------------------------
-    - name: Start and enable Apache
-      service:
-        name: httpd
-        state: started
-        enabled: yes
+    - name: Check WordPress core file exists
+      stat:
+        path: /var/www/html/wp-load.php
+      register: wp_core_file
 
-    # -------------------------------
-    # Download WordPress
-    # -------------------------------
-    - name: Download WordPress
-      get_url:
-        url: https://wordpress.org/latest.tar.gz
-        dest: /tmp/wordpress.tar.gz
+    - name: Verify WordPress files exist
+      assert:
+        that:
+          - wp_core_file.stat.exists
+          - wp_core_file.stat.isreg
+        fail_msg: "WordPress core files are missing at /var/www/html"
+        success_msg: "WordPress files are present"
 
-    - name: Extract WordPress
-      unarchive:
-        src: /tmp/wordpress.tar.gz
-        dest: /tmp/
-        remote_src: yes
+    - name: Check wp-config.php exists
+      stat:
+        path: /var/www/html/wp-config.php
+      register: wp_config_file
 
-    - name: Copy WordPress files
-      copy:
-        src: /tmp/wordpress/
-        dest: "{{ wordpress_dir }}/"
-        remote_src: yes
+    - name: Verify wp-config.php exists
+      assert:
+        that:
+          - wp_config_file.stat.exists
+          - wp_config_file.stat.isreg
+        fail_msg: "wp-config.php is missing"
+        success_msg: "wp-config.php exists"
 
-    # -------------------------------
-    # Set permissions
-    # -------------------------------
-    - name: Set permissions
-      file:
-        path: "{{ wordpress_dir }}"
-        owner: apache
-        group: apache
-        recurse: yes
+    - name: Verify local HTTP endpoint responds
+      uri:
+        url: http://127.0.0.1/
+        method: GET
+        status_code: [200, 301, 302]
+        return_content: false
+      register: local_http
 
-    # -------------------------------
-    # Install WP-CLI
-    # -------------------------------
-    - name: Download WP-CLI
-      get_url:
-        url: https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-        dest: /usr/local/bin/wp
-        mode: '0755'
-
-    # -------------------------------
-    # Get DB password from Secrets Manager
-    # -------------------------------
-    - name: Fetch DB secret
-      shell: >
-        aws secretsmanager get-secret-value
-        --secret-id {{ secret_name }}
-        --query SecretString
-        --output text
-      register: secret_output
-      changed_when: false
-
-    - name: Extract password
-      set_fact:
-        db_password: "{{ (secret_output.stdout | from_json).password }}"
-
-    # -------------------------------
-    # Configure wp-config.php
-    # -------------------------------
-    - name: Copy wp-config
-      copy:
-        src: "{{ wordpress_dir }}/wp-config-sample.php"
-        dest: "{{ wordpress_dir }}/wp-config.php"
-        remote_src: yes
-
-    - name: Set DB name
-      replace:
-        path: "{{ wordpress_dir }}/wp-config.php"
-        regexp: 'database_name_here'
-        replace: "{{ db_name }}"
-
-    - name: Set DB user
-      replace:
-        path: "{{ wordpress_dir }}/wp-config.php"
-        regexp: 'username_here'
-        replace: "{{ db_user }}"
-
-    - name: Set DB password
-      replace:
-        path: "{{ wordpress_dir }}/wp-config.php"
-        regexp: 'password_here'
-        replace: "{{ db_password }}"
-
-    - name: Set DB host
-      replace:
-        path: "{{ wordpress_dir }}/wp-config.php"
-        regexp: 'localhost'
-        replace: "{{ rds_endpoint }}"
-
-    # -------------------------------
-    # Add WordPress constants
-    # -------------------------------
-    - name: Add WP constants
-      blockinfile:
-        path: "{{ wordpress_dir }}/wp-config.php"
-        block: |
-          define('WP_HOME', '{{ alb_dns }}');
-          define('WP_SITEURL', '{{ alb_dns }}');
-
-    # -------------------------------
-    # Restart Apache
-    # -------------------------------
-    - name: Restart Apache
-      service:
-        name: httpd
-        state: restarted
+    - name: Report local HTTP status
+      debug:
+        msg: "Local HTTP check succeeded with status {{ local_http.status }}"
