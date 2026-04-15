@@ -37,19 +37,32 @@ The goal of this project is to deploy a scalable, highly available WordPress sta
 
 ## Architecture Diagram
 
-```mermaid
-flowchart TD
-    Users["End Users<br/>(Global Distribution)"] --> CF["Amazon CloudFront<br/>Global CDN · Edge Caching"]
-    CF --> ALB["Application Load Balancer<br/>Health Checks"]
-    ALB --> ASG["Auto Scaling Group<br/>1-2 EC2 Instances"]
-    ASG --> EC2A["EC2 Instance 1<br/>WordPress + Apache"]
-    ASG --> EC2B["EC2 Instance 2<br/>WordPress + Apache"]
-    EC2A --> S3["Amazon S3<br/>Uploads Bucket"]
-    EC2B --> S3
-    EC2A --> RDS["RDS MySQL<br/>Database"]
-    EC2B --> RDS
+```
+                    End Users (Global)
+                           |
+                           v
+                   Amazon CloudFront
+                    (Global CDN)
+                           |
+                           v
+                  Application Load Balancer
+                      (Health Checks)
+                           |
+                           v
+                    Auto Scaling Group
+                      (1-2 Instances)
+                        /    \
+                       /      \
+                      v        v
+                   EC2-1      EC2-2
+                (WordPress  (WordPress
+                 +Apache)   +Apache)
+                   |          |
+                   |          |
+                   S3        RDS
+```
 
-- `terraform/` Terraform root config and reusable modules
+## Repository Structure
 - `ansible/` validation playbook
 - `python/generate_ansible_config.py` inventory generator for validation runs
 - `terraform/modules/alb/userdata.sh` EC2 bootstrap script used by the launch template
